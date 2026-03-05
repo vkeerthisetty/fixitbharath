@@ -102,5 +102,3 @@ npm run build
 ```
 
 ---
-
-*Made with ❤️ for the Hackathon — FixItBharat aims to bridge the gap between citizens and government.*
