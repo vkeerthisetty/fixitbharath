@@ -1,105 +1,93 @@
-import { PTYPES, MINS } from "../constants.js";
-import { getPriority, getPriorityColor, getEtaDays } from "../utils/helpers.js";
-import { PriorityBadge } from "./ui.jsx";
+import { ArrowUp, Building2, Calendar, MapPin, ShieldCheck, Clock } from "lucide-react";
+import { PTYPES, MINS, STAGES } from "../constants.js";
+import { getPriority, getEtaDays } from "../utils/helpers.js";
+import { PriorityBadge, StatusBadge } from "./ui.jsx";
 import ProgressTracker from "./ProgressTracker.jsx";
 
-export default function IssueCard({ issue, allIssues, saveIssues, currentUser, showVote, showToast }) {
-  const priority  = getPriority(issue.votes);
-  const type      = PTYPES.find((t) => t.id === issue.type);
-  const ministry  = MINS[issue.type];
-  const color     = getPriorityColor(priority);
-  const isVoted   = issue.voters?.includes(currentUser);
+export default function IssueCard({ issue, voteIssue, currentUser, showVote, showToast, compact = false, highlighted = false }) {
+  const priority = getPriority(issue.votes);
+  const type = PTYPES.find((item) => item.id === issue.type);
+  const ministry = MINS[issue.type];
+  const isVoted = issue.voters?.includes(currentUser.id);
+  const currentStage = STAGES[Math.min(issue.stage, STAGES.length - 1)];
+  const eta = getEtaDays(issue.votes, issue.stage);
 
-  const voteMessages = {
-    critical: "🚨 Critical — auto-escalated to ministry!",
-    high:     "🔥 High-impact civic issue",
-    medium:   "📈 Growing community concern",
-    low:      "📋 Newly reported",
-  };
+  const handleVote = async (e) => {
+    e.stopPropagation(); // Avoid triggering any container clicks
+    if (isVoted) {
+      showToast("Info", "You already support this civic issue.");
+      return;
+    }
 
-  const handleVote = async () => {
-    if (isVoted) { showToast("ℹ️", "You already upvoted this issue"); return; }
-    const newVotes = issue.votes + 1;
-    const updated = allIssues.map((i) =>
-      i.id === issue.id
-        ? { ...i, votes: newVotes, voters: [...(i.voters || []), currentUser] }
-        : i
-    );
-    await saveIssues(updated);
-
-    if (newVotes === 5)       showToast("📈", `5 citizens affected — gaining traction!`);
-    else if (newVotes === 12) showToast("🔥", `High priority unlocked — 12 votes!`);
-    else if (newVotes === 20) showToast("🚨", `CRITICAL — 20+ votes! Ministry auto-alerted.`);
-    else                      showToast("👍", `Upvoted · ${newVotes} total votes`);
+    try {
+      const updatedIssue = await voteIssue(issue.id);
+      showToast("Supported", `Added support! ${updatedIssue.votes} verified citizens backing this issue.`);
+    } catch (error) {
+      showToast("Error", error.message);
+    }
   };
 
   return (
-    <div style={{ background: "#fff", borderRadius: 16, padding: "19px 21px", boxShadow: "0 4px 18px rgba(0,0,0,.06)", marginBottom: 18, borderLeft: `4px solid ${color}` }}>
-
-      {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>{type?.icon} {issue.title}</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 5, fontSize: 12, color: "#ADB5BD" }}>
-            <span>📍 {issue.loc}</span>
-            <span>📅 {issue.date}</span>
-            <span>🏛️ {ministry?.name?.replace("Ministry of ", "Min. of ") || ""}</span>
-            <span>by {issue.by.slice(0, 4)} ****</span>
-            {issue.stage >= 2 && (
-              <span style={{ background: "#e8f5e9", color: "#138808", padding: "2px 8px", borderRadius: 50, fontSize: 10, fontWeight: 700 }}>
-                ✅ Field Verified
-              </span>
-            )}
-          </div>
+    <article 
+      className={`issue-card ${highlighted ? "highlighted-card" : ""}`} 
+      style={{ animation: "fadeInSlideUp 0.4s ease" }}
+    >
+      <div className="issue-card-header">
+        <div>
+          <div className="eyebrow" style={{ color: "var(--primary-light)", fontWeight: 700, fontSize: 11 }}>{type?.label || issue.type}</div>
+          <div className="issue-title" style={{ marginTop: 2 }}>{issue.title}</div>
         </div>
-        <PriorityBadge priority={priority} />
+        <div style={{ flexShrink: 0 }}>
+          <PriorityBadge priority={priority} />
+        </div>
       </div>
 
-      {/* ── Description ── */}
-      {issue.desc && (
-        <div style={{ fontSize: 13, color: "#495057", lineHeight: 1.65, padding: "10px 13px", background: "#F8F9FA", borderRadius: 10, borderLeft: `3px solid ${color}`, marginBottom: 10 }}>
-          {issue.desc}
+      <div className="meta-row">
+        <span><MapPin size={13} style={{ color: "var(--primary-light)" }} /> {issue.loc}</span>
+        <span><Calendar size={13} style={{ color: "var(--muted)" }} /> {issue.date}</span>
+        <span><Building2 size={13} style={{ color: "var(--muted)" }} /> {ministry?.dept}</span>
+        <span><ShieldCheck size={13} style={{ color: "var(--success)" }} /> {issue.reporterDisplay || "Verified citizen"}</span>
+      </div>
+
+      <div className="meta-row" style={{ gap: 8 }}>
+        <StatusBadge status={issue.moderationStatus} />
+        <span className="status-badge status-pending" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <Clock size={13} /> {currentStage.name}
+        </span>
+        {issue.stage < 6 && eta > 0 && (
+          <span className="status-badge" style={{ background: "rgba(30, 58, 138, 0.04)", color: "var(--primary)", fontWeight: 700 }}>
+            ETA: {eta} Days
+          </span>
+        )}
+      </div>
+
+      {!compact && issue.desc && (
+        <div className="issue-desc" style={{ marginTop: 4 }}>{issue.desc}</div>
+      )}
+
+      {!compact && (issue.photoUrl || issue.photo) && (
+        <img className="issue-photo" src={issue.photoUrl || issue.photo} alt="Issue evidence" style={{ marginTop: 8 }} />
+      )}
+
+      {!compact && (
+        <div style={{ borderTop: "1.5px solid var(--line)", borderBottom: "1.5px solid var(--line)", padding: "16px 0", marginTop: 8 }}>
+          <div className="section-title" style={{ fontSize: 11, marginBottom: 12 }}>Resolution Status Workflow</div>
+          <ProgressTracker issue={issue} compact />
         </div>
       )}
 
-      {/* ── Photo ── */}
-      {issue.photo && (
-        <img src={issue.photo} alt="evidence" style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 10, marginBottom: 12, border: "2px solid #E9ECEF" }} />
-      )}
-
-      {/* ── Progress Tracker ── */}
-      <ProgressTracker issue={issue} />
-
-      {/* ── Upvote ── */}
-      {showVote && (
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 14, padding: "13px 15px", background: "#F8F9FA", borderRadius: 14, border: "1.5px solid #E9ECEF" }}>
-          <button
-            onClick={handleVote}
-            onMouseEnter={(e) => { if (!isVoted) { e.currentTarget.style.borderColor = "#FF6B00"; e.currentTarget.style.background = "#FFF3E8"; } }}
-            onMouseLeave={(e) => { if (!isVoted) { e.currentTarget.style.borderColor = "#E9ECEF"; e.currentTarget.style.background = "#fff"; } }}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, minWidth: 66, height: 66, border: `2.5px solid ${isVoted ? "#FF6B00" : "#E9ECEF"}`, borderRadius: 14, background: isVoted ? "#FF6B00" : "#fff", cursor: "pointer", padding: 4, transition: "all .2s", flexShrink: 0 }}
-          >
-            <span style={{ fontSize: 20, lineHeight: 1 }}>{isVoted ? "✅" : "▲"}</span>
-            <span style={{ fontFamily: "Georgia, serif", fontSize: 18, fontWeight: 800, color: isVoted ? "#fff" : "#212529", lineHeight: 1 }}>
-              {issue.votes}
-            </span>
-            <span style={{ fontSize: 9, fontWeight: 700, color: isVoted ? "rgba(255,255,255,.8)" : "#ADB5BD", letterSpacing: 0.5 }}>
-              {isVoted ? "VOTED" : "UPVOTE"}
-            </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 8, borderTop: compact ? "1px solid var(--line)" : "none", paddingTop: compact ? 12 : 0 }}>
+        <div>
+          <div style={{ fontWeight: 800, color: "var(--text)", fontSize: 14 }}>{issue.votes} verified citizen support{issue.votes === 1 ? "" : "s"}</div>
+          <div className="helper" style={{ fontSize: 11 }}>Limited to 1 support per unique citizen token.</div>
+        </div>
+        {showVote && (
+          <button className={`button ${isVoted ? "secondary" : "primary"}`} onClick={handleVote} style={{ minHeight: 38, height: 38, padding: "0 16px" }}>
+            <ArrowUp size={16} /> 
+            <span>{isVoted ? "Supported" : "Support"}</span>
           </button>
-
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color }}>{voteMessages[priority]}</div>
-            <div style={{ fontSize: 11, color: "#ADB5BD", marginTop: 3 }}>
-              {issue.votes} citizen{issue.votes !== 1 ? "s" : ""} affected · more votes = faster resolution
-            </div>
-            {!isVoted
-              ? <div style={{ fontSize: 11, color: "#FF6B00", marginTop: 5, fontWeight: 600 }}>👆 Upvote to push this issue up the queue</div>
-              : <div style={{ fontSize: 11, color: "#138808", marginTop: 5, fontWeight: 600 }}>✅ You have upvoted this issue</div>
-            }
-          </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </article>
   );
 }

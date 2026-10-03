@@ -1,6 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-//  AADHAAR TEST IDS
-// ─────────────────────────────────────────────────────────────
 export const AADHAR_IDS = [
   "2345 6789 0123",
   "3456 7890 1234",
@@ -14,80 +11,68 @@ export const AADHAR_IDS = [
   "2468 1357 9024",
 ];
 
-// ─────────────────────────────────────────────────────────────
-//  PROBLEM TYPES
-// ─────────────────────────────────────────────────────────────
 export const PTYPES = [
-  { id: "pothole",      label: "Pothole",      icon: "🕳️" },
-  { id: "sewage",       label: "Open Sewage",  icon: "🚰" },
-  { id: "garbage",      label: "Garbage Dump", icon: "🗑️" },
-  { id: "streetlight",  label: "Street Light", icon: "💡" },
-  { id: "waterlog",     label: "Waterlogging", icon: "💧" },
+  { id: "pothole", label: "Pothole", icon: "" },
+  { id: "sewage", label: "Open Sewage", icon: "" },
+  { id: "garbage", label: "Garbage Dump", icon: "" },
+  { id: "streetlight", label: "Street Light", icon: "" },
+  { id: "waterlog", label: "Waterlogging", icon: "" },
 ];
 
-// ─────────────────────────────────────────────────────────────
-//  MINISTRIES
-// ─────────────────────────────────────────────────────────────
 export const MINS = {
   pothole: {
     name: "Ministry of Road Transport & Highways",
     dept: "MoRTH",
-    icon: "🛣️",
+    icon: "",
     bg: "#FFF7ED",
     ac: "#C2410C",
   },
   sewage: {
     name: "Ministry of Jal Shakti",
     dept: "Water & Sanitation",
-    icon: "💧",
+    icon: "",
     bg: "#EFF6FF",
     ac: "#1D4ED8",
   },
   garbage: {
     name: "Ministry of Housing & Urban Affairs",
     dept: "MoHUA",
-    icon: "🏙️",
+    icon: "",
     bg: "#F0FDF4",
     ac: "#15803D",
   },
   streetlight: {
     name: "Ministry of Power",
     dept: "Electricity",
-    icon: "⚡",
+    icon: "",
     bg: "#FAF5FF",
     ac: "#7C3AED",
   },
   waterlog: {
     name: "Ministry of Jal Shakti",
     dept: "Water & Sanitation",
-    icon: "💧",
+    icon: "",
     bg: "#EFF6FF",
     ac: "#1D4ED8",
   },
 };
 
-// ─────────────────────────────────────────────────────────────
-//  RESOLUTION STAGES (7 steps)
-// ─────────────────────────────────────────────────────────────
 export const STAGES = [
-  { icon: "📋", name: "Reported",           desc: "Complaint submitted via FixItBharat portal" },
-  { icon: "🔍", name: "Under Review",       desc: "Being reviewed by local ward officer" },
-  { icon: "✅", name: "Verified On-Site",   desc: "Field inspector confirmed the issue at location" },
-  { icon: "📨", name: "Ministry Notified",  desc: "Assigned ministry received automated alert" },
-  { icon: "📄", name: "Work Order Issued",  desc: "Department raised tender / work order for repair" },
-  { icon: "🔧", name: "Repair In Progress", desc: "Repair crew deployed — work actively ongoing" },
-  { icon: "🎉", name: "Resolved",           desc: "Issue fixed, citizen notified, case closed" },
+  { name: "Reported", desc: "Complaint submitted through the portal" },
+  { name: "Under Review", desc: "Local officer is reviewing the complaint" },
+  { name: "Verified On-Site", desc: "Field inspector confirmed the issue at location" },
+  { name: "Department Notified", desc: "Assigned department received the case" },
+  { name: "Work Order Issued", desc: "Department raised a work order for repair" },
+  { name: "Repair In Progress", desc: "Repair crew has been assigned or deployed" },
+  { name: "Resolved", desc: "Issue fixed and case closed" },
 ];
 
-// ─────────────────────────────────────────────────────────────
-//  SEED / DEMO ISSUES
-// ─────────────────────────────────────────────────────────────
 export const SEED_ISSUES = [
   {
     id: "ISS001",
     type: "pothole",
     title: "Massive pothole on NH-48 near Gurugram Toll",
-    desc: "A 3×2 ft pothole near the toll plaza. 4 tyre bursts this week. Dangerous at night — no warning signs.",
+    desc: "A 3 x 2 ft pothole near the toll plaza. Four tyre bursts were reported this week. Dangerous at night because no warning signs are present.",
     loc: "NH-48, Gurugram, Haryana",
     votes: 24,
     stage: 5,
@@ -101,7 +86,7 @@ export const SEED_ISSUES = [
     id: "ISS002",
     type: "sewage",
     title: "Open sewage overflow on Ring Road",
-    desc: "Cracked pipeline — raw sewage on footpath for 6 days. Skin infections and severe odour reported.",
+    desc: "Cracked pipeline with raw sewage on the footpath for six days. Residents report severe odour and skin infection risk.",
     loc: "Ring Road, New Delhi",
     votes: 19,
     stage: 3,
@@ -115,7 +100,7 @@ export const SEED_ISSUES = [
     id: "ISS003",
     type: "garbage",
     title: "Illegal garbage dump near Kendriya Vidyalaya",
-    desc: "30-ft heap near primary school gate. Rodents daily. Children walk through waste every morning.",
+    desc: "Large garbage heap near the primary school gate. Children walk past waste every morning and residents report rodents daily.",
     loc: "Sector 15, Noida, UP",
     votes: 13,
     stage: 2,
@@ -129,7 +114,7 @@ export const SEED_ISSUES = [
     id: "ISS004",
     type: "streetlight",
     title: "All street lights out on MG Road 500m stretch",
-    desc: "Dark for 2 weeks. 3 accidents reported. CCTV also down. Residents scared after dark.",
+    desc: "Street lights have been dark for two weeks. Residents reported three accidents and safety concerns after dark.",
     loc: "MG Road, Bengaluru",
     votes: 9,
     stage: 1,
@@ -143,7 +128,7 @@ export const SEED_ISSUES = [
     id: "ISS005",
     type: "waterlog",
     title: "Chronic waterlogging blocks residential lane",
-    desc: "Standing water 4+ days after rain. Lane impassable. Dengue mosquito breeding risk rising.",
+    desc: "Standing water has remained for more than four days after rain. Lane is difficult to cross and mosquito breeding risk is rising.",
     loc: "Salt Lake, Kolkata",
     votes: 6,
     stage: 0,

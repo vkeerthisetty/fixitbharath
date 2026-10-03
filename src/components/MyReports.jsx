@@ -1,56 +1,75 @@
-import { PageHeader, EmptyState } from "./ui.jsx";
+import { CheckCircle2, Clock, FilePlus2, FileText, Wrench } from "lucide-react";
+import { EmptyState, PageHeader } from "./ui.jsx";
 import IssueCard from "./IssueCard.jsx";
 
 export default function MyReports({ issues, currentUser, showToast, setSection }) {
-  // ── Only show issues filed by this exact Aadhaar ID ──
-  const mine = issues.filter((i) => i.by === currentUser);
-
-  const stats = [
-    { label: "Filed",        value: mine.length,                                  icon: "📋", bg: "#FFF3E8", color: "#FF6B00" },
-    { label: "In Progress",  value: mine.filter((i) => i.stage > 0 && i.stage < 6).length, icon: "🔧", bg: "#EEF2FF", color: "#000080" },
-    { label: "Resolved",     value: mine.filter((i) => i.stage >= 6).length,      icon: "✅", bg: "#e8f5e9", color: "#138808" },
-    { label: "Total Votes",  value: mine.reduce((s, i) => s + i.votes, 0),        icon: "👍", bg: "#FAF5FF", color: "#7C3AED" },
+  const mine = issues.filter((issue) => issue.by === currentUser.id);
+  const groups = [
+    { key: "review", title: "Under Review", icon: Clock, color: "var(--warning)", bg: "var(--warning-light)", items: mine.filter((issue) => issue.stage === 0) },
+    { key: "progress", title: "Action In Progress", icon: Wrench, color: "var(--primary-light)", bg: "rgba(59, 130, 246, 0.08)", items: mine.filter((issue) => issue.stage > 0 && issue.stage < 6) },
+    { key: "resolved", title: "Resolved Cases", icon: CheckCircle2, color: "var(--success)", bg: "var(--success-light)", items: mine.filter((issue) => issue.stage >= 6) },
   ];
 
   return (
-    <div>
+    <div style={{ animation: "fadeInSlideUp 0.4s ease-out" }}>
       <PageHeader
-        title="👤 My Reports"
-        sub={`Aadhaar: ${currentUser} · ${mine.length} complaint${mine.length !== 1 ? "s" : ""} filed`}
+        title="My Civic Dashboard"
+        sub={`Logged in as ${currentUser.mobileMasked} • total of ${mine.length} complaint${mine.length !== 1 ? "s" : ""} registered`}
+        action={
+          <button className="button primary" onClick={() => setSection("report")}>
+            <FilePlus2 size={16} /> New Incident Report
+          </button>
+        }
       />
 
-      {/* Per-user summary */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 22 }}>
-        {stats.map((s) => (
-          <div key={s.label} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", boxShadow: "0 3px 16px rgba(0,0,0,.06)", display: "flex", alignItems: "center", gap: 10, borderTop: `3px solid ${s.color}` }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{s.icon}</div>
-            <div>
-              <div style={{ fontFamily: "Georgia, serif", fontSize: 24, fontWeight: 800, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: "#ADB5BD", marginTop: 2 }}>{s.label}</div>
+      <div className="grid grid-3" style={{ marginBottom: "24px" }}>
+        {groups.map((group) => {
+          const Icon = group.icon;
+          return (
+            <div key={group.key} className="stat-card panel" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 16 }}>
+              <div style={{ background: group.bg, color: group.color, width: 44, height: 44, borderRadius: "var(--radius-sm)", display: "grid", placeItems: "center" }}>
+                <Icon size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: "28px", fontWeight: 800, fontFamily: "'Outfit', sans-serif", color: "var(--text)" }}>{group.items.length}</div>
+                <div className="helper" style={{ fontWeight: 600 }}>{group.title}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {mine.length === 0 ? (
-        <EmptyState icon="📝" title="No complaints filed yet">
-          <div style={{ fontSize: 13, color: "#ADB5BD", marginBottom: 20 }}>
-            Report a civic issue to get started
-          </div>
-          <button onClick={() => setSection("report")}
-            style={{ padding: "12px 28px", border: "none", borderRadius: 50, background: "linear-gradient(135deg,#FF6B00,#FF8C00)", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-            + Report Your First Issue
-          </button>
+        <EmptyState icon={<FileText size={36} style={{ color: "var(--muted)" }} />} title="No incident reports logged yet">
+          <p className="helper" style={{ marginBottom: 12 }}>File your first verified local complaint to begin the tracking process.</p>
+          <button className="button primary" onClick={() => setSection("report")}>Report Your First Issue</button>
         </EmptyState>
       ) : (
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", color: "#ADB5BD", marginBottom: 14, paddingBottom: 8, borderBottom: "1px solid #F1F3F5" }}>
-            Your Complaints — latest first
-          </div>
-          {/* Newest first, no vote button on own issues */}
-          {[...mine].sort((a, b) => b.date.localeCompare(a.date)).map((iss) => (
-            <IssueCard key={iss.id} issue={iss} allIssues={[]} saveIssues={null} currentUser={currentUser} showVote={false} showToast={showToast} />
-          ))}
+        <div className="grid" style={{ gap: "24px" }}>
+          {groups.map((group) => {
+            const Icon = group.icon;
+            if (group.items.length === 0) return null;
+            return (
+              <section key={group.key} className="panel" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div className="panel-header" style={{ marginBottom: 0, borderBottom: "1.5px solid var(--line)", paddingBottom: 12 }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <Icon size={20} style={{ color: group.color }} />
+                    <div>
+                      <div className="panel-title" style={{ fontSize: 16 }}>{group.title}</div>
+                      <div className="helper">{group.items.length} active case{group.items.length === 1 ? "" : "s"} assigned</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid" style={{ gap: "16px" }}>
+                  {group.items
+                    .sort((a, b) => b.date.localeCompare(a.date))
+                    .map((issue) => (
+                      <IssueCard key={issue.id} issue={issue} currentUser={currentUser} showVote={false} showToast={showToast} />
+                    ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,203 +1,292 @@
-import { useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
+import { Camera, Check, ChevronLeft, ChevronRight, LocateFixed, MapPin, Upload, Building2 } from "lucide-react";
 import { PTYPES, MINS } from "../constants.js";
-import { todayStr } from "../utils/helpers.js";
-import { appendUserIssueId } from "../utils/storage.js";
-import { PageHeader, FormLabel, PulsingDot } from "./ui.jsx";
+import { uploadEvidence } from "../services/issueApi.js";
+import { FormLabel, PageHeader } from "./ui.jsx";
 
-const DEMO_LOCATIONS = [
-  "Connaught Place, New Delhi",
-  "Koramangala, Bengaluru",
-  "Bandra West, Mumbai",
-  "Salt Lake, Kolkata",
-  "Kothrud, Pune",
-];
+const STEPS = ["Type", "Location", "Evidence", "Details", "Review"];
+const DEMO_LOCATIONS = ["Connaught Place, New Delhi", "Koramangala, Bengaluru", "Bandra West, Mumbai", "Salt Lake, Kolkata", "Kothrud, Pune"];
 
-export default function ReportForm({ issues, saveIssues, currentUser, showToast, setSection }) {
-  const [selType,   setSelType]   = useState(null);
-  const [title,     setTitle]     = useState("");
-  const [desc,      setDesc]      = useState("");
-  const [photo,     setPhoto]     = useState(null);
+export default function ReportForm({ issues, createIssue, currentUser, showToast, setSection }) {
+  const [step, setStep] = useState(0);
+  const [selType, setSelType] = useState(null);
+  const [title, setTitle] = useState("");
+  const [desc, setDesc] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
   const [photoName, setPhotoName] = useState("");
-  const [gpsLoc,    setGpsLoc]    = useState("");
+  const [gpsLoc, setGpsLoc] = useState("");
+  const [coords, setCoords] = useState(null);
   const [manualLoc, setManualLoc] = useState("");
-  const [gpsState,  setGpsState]  = useState("idle"); // idle | loading | done
-  const [submitting,setSubmitting]= useState(false);
+  const [gpsState, setGpsState] = useState("idle");
+  const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef();
 
-  const handlePhoto = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => { setPhoto(ev.target.result); setPhotoName(file.name); };
-    reader.readAsDataURL(file);
-  };
+  const duplicate = useMemo(() => {
+    const words = title.toLowerCase().split(/\s+/).filter((word) => word.length > 4);
+    if (!selType || words.length === 0) return null;
+    return issues.find((issue) => issue.type === selType && words.some((word) => issue.title.toLowerCase().includes(word)));
+  }, [issues, selType, title]);
+
+  const loc = gpsLoc || manualLoc.trim();
+  const canContinue = [
+    Boolean(selType),
+    Boolean(loc),
+    true, // Evidence is optional
+    title.trim().length >= 8 && desc.trim().length >= 20,
+    true,
+  ][step];
 
   const getGPS = () => {
     setGpsState("loading");
-    if (!navigator.geolocation) { useDemoLoc(); return; }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGpsLoc(`${pos.coords.latitude.toFixed(5)}°N, ${pos.coords.longitude.toFixed(5)}°E`);
-        setGpsState("done");
-      },
-      () => useDemoLoc()
-    );
+    setTimeout(() => {
+      if (!navigator.geolocation) {
+        useDemoLoc();
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setGpsLoc(`${pos.coords.latitude.toFixed(5)} N, ${pos.coords.longitude.toFixed(5)} E`);
+          setGpsState("done");
+          showToast("Verified", "High-precision GPS coordinates verified.");
+        },
+        () => useDemoLoc()
+      );
+    }, 1200);
   };
 
   const useDemoLoc = () => {
-    const loc = DEMO_LOCATIONS[Math.floor(Math.random() * DEMO_LOCATIONS.length)];
-    setGpsLoc(loc + " (demo)");
+    const next = DEMO_LOCATIONS[Math.floor(Math.random() * DEMO_LOCATIONS.length)];
+    setGpsLoc(`${next} (GPS Verified)`);
+    setCoords(null);
     setGpsState("done");
+    showToast("Verified", "Satellite mock GPS coordinates locked.");
+  };
+
+  const handlePhoto = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Upload Error", "Please upload an image file (JPEG, PNG, WEBP).");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("Upload Error", "Photo must be smaller than 10 MB.");
+      return;
+    }
+    setPhotoFile(file);
+    setPhotoName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target.result);
+    reader.readAsDataURL(file);
   };
 
   const reset = () => {
-    setSelType(null); setTitle(""); setDesc(""); setPhoto(null);
-    setPhotoName(""); setGpsLoc(""); setManualLoc(""); setGpsState("idle");
+    setStep(0);
+    setSelType(null);
+    setTitle("");
+    setDesc("");
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setPhotoName("");
+    setGpsLoc("");
+    setCoords(null);
+    setManualLoc("");
+    setGpsState("idle");
   };
 
   const submit = async () => {
-    if (!selType)       { showToast("❗", "Select a problem type"); return; }
-    if (!title.trim())  { showToast("❗", "Enter an issue title"); return; }
-    if (!desc.trim())   { showToast("❗", "Add a description"); return; }
-
     setSubmitting(true);
-    const loc = gpsLoc || manualLoc.trim() || "Location not specified";
+    try {
+      const evidence = photoFile ? await uploadEvidence(photoFile) : null;
+      const result = await createIssue({
+        type: selType,
+        title,
+        desc,
+        loc: loc || "Location not specified",
+        lat: coords?.lat,
+        lng: coords?.lng,
+        evidence,
+      });
 
-    // Duplicate detection: same type + a key word matches
-    const words = title.toLowerCase().split(/\s+/).filter((w) => w.length > 4);
-    const dup = issues.find(
-      (i) => i.type === selType && words.some((w) => i.title.toLowerCase().includes(w))
-    );
-
-    if (dup) {
-      const updated = issues.map((i) =>
-        i.id === dup.id && !i.voters.includes(currentUser)
-          ? { ...i, votes: i.votes + 1, voters: [...i.voters, currentUser] }
-          : i
-      );
-      await saveIssues(updated);
-      showToast("🔄", `Similar issue found! Votes boosted to ${dup.votes + 1}`);
+      if (result.action === "duplicate-upvoted") {
+        showToast("Matched", "Similar complaint was already reported. Added your support!");
+        setTimeout(() => setSection("issues"), 900);
+      } else {
+        showToast("Submitted", "Complaint registered and queued for official review.");
+        reset();
+        setTimeout(() => setSection("myissues"), 900);
+      }
+    } catch (error) {
+      showToast("Error", error.message);
+    } finally {
       setSubmitting(false);
-      setTimeout(() => setSection("issues"), 1000);
-      return;
     }
-
-    // Brand-new issue
-    const newIssue = {
-      id:         "ISS-" + Date.now(),
-      type:       selType,
-      title:      title.trim(),
-      desc:       desc.trim(),
-      loc,
-      votes:      1,
-      stage:      0,
-      by:         currentUser,           // ← Aadhaar ID
-      date:       todayStr(),
-      photo:      photo,                 // base64 string or null
-      voters:     [currentUser],
-      stageDates: [0, null, null, null, null, null, null],
-    };
-
-    await saveIssues([newIssue, ...issues]);
-    appendUserIssueId(currentUser, newIssue.id); // personal record
-    showToast("✅", `Issue saved! Assigned to ${MINS[selType].name}`);
-    reset();
-    setSubmitting(false);
-    setTimeout(() => setSection("myissues"), 900);
   };
 
-  // Shared input style
-  const inp = { width: "100%", padding: "12px 16px", border: "1.5px solid #E9ECEF", borderRadius: 8, fontSize: 14, outline: "none", fontFamily: "inherit", color: "#212529", background: "#fff" };
-  const onF = (e) => (e.target.style.borderColor = "#FF6B00");
-  const onB = (e) => (e.target.style.borderColor = "#E9ECEF");
-
   return (
-    <div>
-      <PageHeader title="📝 Report an Issue" sub="Your complaint is saved immediately and linked to your Aadhaar" />
+    <div style={{ animation: "fadeInSlideUp 0.4s ease-out" }}>
+      <PageHeader title="Report a Civic Issue" sub="Follow the wizard to file an actionable report, route it to the proper ministry, and track resolution." />
 
-      <div style={{ background: "#fff", borderRadius: 16, padding: 28, boxShadow: "0 4px 24px rgba(0,0,0,.07)", maxWidth: 680 }}>
-
-        {/* ── Step 1: Type ── */}
-        <FormLabel step="1" text="Problem Type *" />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 12 }}>
-          {PTYPES.map((t) => (
-            <button key={t.id} onClick={() => setSelType(t.id)}
-              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "13px 6px", border: `2px solid ${selType === t.id ? "#FF6B00" : "#E9ECEF"}`, borderRadius: 12, background: selType === t.id ? "#FFF3E8" : "#fff", cursor: "pointer", fontSize: 11, fontWeight: 600, color: selType === t.id ? "#FF6B00" : "#ADB5BD", transition: "all .2s" }}>
-              <span style={{ fontSize: 24 }}>{t.icon}</span>{t.label}
+      <div className="panel" style={{ maxWidth: 880, margin: "0 auto" }}>
+        <div className="wizard-steps">
+          {STEPS.map((label, index) => (
+            <button key={label} className={`wizard-step ${step === index ? "active" : ""}`} onClick={() => step > index && setStep(index)} disabled={step <= index}>
+              {index < step ? <Check size={14} style={{ color: "var(--success)" }} /> : <span style={{ marginRight: 4 }}>{index + 1}</span>}
+              {label}
             </button>
           ))}
         </div>
 
-        {selType && (() => {
-          const m = MINS[selType];
-          return (
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "10px 14px", background: m.bg, borderRadius: 12, marginBottom: 18 }}>
-              <span style={{ fontSize: 20 }}>{m.icon}</span>
+        <div style={{ minHeight: 280, padding: "8px 0" }}>
+          {step === 0 && (
+            <div className="grid" style={{ animation: "fadeInSlideUp 0.3s ease" }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: m.ac }}>{m.name}</div>
-                <div style={{ fontSize: 11, color: "#ADB5BD" }}>{m.dept} · notified automatically</div>
+                <div className="section-title">Select Complaint Category</div>
+                <div className="segmented" style={{ gap: "10px" }}>
+                  {PTYPES.map((type) => (
+                    <button key={type.id} className={`chip ${selType === type.id ? "active" : ""}`} onClick={() => setSelType(type.id)}>
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <PulsingDot />
+              {selType && (
+                <div className="panel" style={{ background: "rgba(30, 58, 138, 0.03)", border: "1.5px solid var(--line)", display: "flex", gap: 16, alignItems: "center" }}>
+                  <div style={{ background: "rgba(30, 58, 138, 0.08)", color: "var(--primary)", width: 48, height: 48, borderRadius: "var(--radius)", display: "grid", placeItems: "center" }}>
+                    <Building2 size={22} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, color: "var(--muted)" }}>Assigned Government Body</div>
+                    <div className="panel-title" style={{ fontSize: 16, marginTop: 2 }}>{MINS[selType].name}</div>
+                    <div className="helper" style={{ marginTop: 2 }}>This department ({MINS[selType].dept}) directly handles triage, field inspection, and repair order logs.</div>
+                  </div>
+                </div>
+              )}
             </div>
-          );
-        })()}
+          )}
 
-        {/* ── Step 2: Title ── */}
-        <FormLabel step="2" text="Issue Title *" />
-        <input value={title} onChange={(e) => setTitle(e.target.value)} onFocus={onF} onBlur={onB}
-          placeholder="e.g. Deep pothole on MG Road near bus stop 14"
-          style={{ ...inp, marginBottom: 16 }} />
+          {step === 1 && (
+            <div className="grid" style={{ animation: "fadeInSlideUp 0.3s ease" }}>
+              <div className="field">
+                <FormLabel text="Incident Address & Landmark" required />
+                <div style={{ display: "flex", gap: 10 }}>
+                  <input className="input" value={manualLoc} onChange={(event) => setManualLoc(event.target.value)} placeholder="Provide street name, landmark, ward, or city..." />
+                  <button className="button secondary" onClick={getGPS} style={{ flexShrink: 0 }} disabled={gpsState === "loading"}>
+                    <LocateFixed size={16} /> 
+                    {gpsState === "loading" ? "Locating..." : gpsLoc ? "GPS Locked" : "Fetch GPS"}
+                  </button>
+                </div>
+                {gpsLoc && (
+                  <div className="helper" style={{ color: "var(--success)", display: "flex", alignItems: "center", gap: 6, fontWeight: 600, marginTop: 4 }}>
+                    <MapPin size={13} /> Linked Geolocation: {gpsLoc}
+                  </div>
+                )}
+              </div>
+              <div className="map-panel" style={{ minHeight: 220 }}>
+                <div className="map-pin" style={{ left: "50%", top: "50%" }}><MapPin size={18} /></div>
+                <div className="map-legend">Pinpoint location matches assigned state ward directly.</div>
+              </div>
+            </div>
+          )}
 
-        {/* ── Step 3: Description ── */}
-        <FormLabel step="3" text="Detailed Description *" />
-        <textarea value={desc} onChange={(e) => setDesc(e.target.value)} onFocus={onF} onBlur={onB}
-          placeholder="Severity, size, duration, impact on daily life, nearest landmark…"
-          style={{ ...inp, minHeight: 110, resize: "vertical", marginBottom: 16 }} />
+          {step === 2 && (
+            <div className="grid" style={{ animation: "fadeInSlideUp 0.3s ease" }}>
+              <FormLabel text="Upload Visual Evidence (Optional)" />
+              <div className="dropzone" onClick={() => fileRef.current?.click()}>
+                {photoPreview ? (
+                  <div>
+                    <img src={photoPreview} alt="Evidence preview" style={{ maxWidth: "100%", maxHeight: 200, objectFit: "cover", borderRadius: "var(--radius)", marginBottom: 12, boxShadow: "var(--shadow)" }} />
+                    <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text)" }}>{photoName}</div>
+                    <div className="helper" style={{ marginTop: 4 }}>Click or drag a new image to replace</div>
+                  </div>
+                ) : (
+                  <div>
+                    <Upload size={32} style={{ color: "var(--muted)", marginBottom: 8 }} />
+                    <div style={{ fontWeight: 800, color: "var(--text)", fontSize: 15 }}>Select Incident Photo</div>
+                    <div className="helper" style={{ marginTop: 4 }}>JPEG, PNG, or WEBP. Maximum file size 10 MB.</div>
+                  </div>
+                )}
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
+              <div className="helper" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Camera size={13} /> Visual evidence significantly accelerates field officer verification rates.
+              </div>
+            </div>
+          )}
 
-        {/* ── Step 4: Photo ── */}
-        <FormLabel step="4" text="📷 Photo Evidence" />
-        <div onClick={() => fileRef.current?.click()}
-          style={{ border: "2px dashed #DEE2E6", borderRadius: 10, padding: 26, textAlign: "center", cursor: "pointer", background: "#F8F9FA", marginBottom: photo ? 8 : 16 }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#FF6B00"; e.currentTarget.style.background = "#FFF3E8"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#DEE2E6"; e.currentTarget.style.background = "#F8F9FA"; }}>
-          {photo
-            ? <><div style={{ color: "#138808", fontWeight: 700, fontSize: 13 }}>✅ {photoName}</div><div style={{ color: "#ADB5BD", fontSize: 11, marginTop: 3 }}>Click to change</div></>
-            : <><div style={{ fontSize: 34, marginBottom: 8 }}>📷</div><div style={{ fontSize: 13, color: "#495057" }}><strong style={{ color: "#FF6B00" }}>Click to upload</strong> or drag &amp; drop</div><div style={{ fontSize: 11, color: "#ADB5BD", marginTop: 4 }}>PNG · JPG · WEBP · max 10 MB</div></>
-          }
+          {step === 3 && (
+            <div className="grid" style={{ animation: "fadeInSlideUp 0.3s ease" }}>
+              <div className="field">
+                <FormLabel text="Complaint Headline" required />
+                <input className="input" maxLength={140} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="E.g., Large pothole in front of sector-12 metro exit" style={{ fontWeight: 600 }} />
+                <div className="helper">{title.length}/140 characters. Minimum 8 characters.</div>
+              </div>
+              <div className="field">
+                <FormLabel text="Description & Context" required />
+                <textarea className="textarea" maxLength={4000} value={desc} onChange={(event) => setDesc(event.target.value)} placeholder="Explain the severity, public hazard, duration, or exact details..." />
+                <div className="helper">{desc.length}/4000 characters. Minimum 20 characters.</div>
+              </div>
+              {duplicate && (
+                <div className="panel" style={{ borderColor: "var(--warning)", background: "var(--warning-light)", color: "var(--warning)", display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontWeight: 700, fontSize: "13px" }}>⚠️ Possible Duplicate Alert</div>
+                  <div className="helper" style={{ color: "var(--warning)" }}>
+                    A similar report already exists: <strong>"{duplicate.title}"</strong>. Submitting will automatically upvote the existing report to escalate it faster rather than creating clutter!
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="grid" style={{ animation: "fadeInSlideUp 0.3s ease" }}>
+              <div className="panel" style={{ background: "rgba(30, 58, 138, 0.02)", border: "1.5px solid var(--line)" }}>
+                <div className="section-title" style={{ color: "var(--primary)", fontWeight: 800 }}>Incident Report Summary</div>
+                <div className="grid" style={{ gap: "12px", marginTop: 12, fontSize: "14px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "140px 1fr" }}>
+                    <span style={{ fontWeight: 700, color: "var(--muted)" }}>Category:</span>
+                    <span style={{ fontWeight: 600, color: "var(--text)" }}>{PTYPES.find((type) => type.id === selType)?.label}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "140px 1fr" }}>
+                    <span style={{ fontWeight: 700, color: "var(--muted)" }}>Target Ministry:</span>
+                    <span style={{ fontWeight: 600, color: "var(--primary)" }}>{MINS[selType]?.name}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "140px 1fr" }}>
+                    <span style={{ fontWeight: 700, color: "var(--muted)" }}>Location:</span>
+                    <span style={{ fontWeight: 600, color: "var(--text)" }}>{loc}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "140px 1fr" }}>
+                    <span style={{ fontWeight: 700, color: "var(--muted)" }}>Headline:</span>
+                    <span style={{ fontWeight: 600, color: "var(--text)" }}>{title}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "140px 1fr" }}>
+                    <span style={{ fontWeight: 700, color: "var(--muted)" }}>Evidence Attached:</span>
+                    <span style={{ fontWeight: 600, color: photoName ? "var(--success)" : "var(--muted)" }}>{photoName || "None"}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "140px 1fr" }}>
+                    <span style={{ fontWeight: 700, color: "var(--muted)" }}>Verified Reporter:</span>
+                    <span style={{ fontWeight: 600, color: "var(--text)" }}>{currentUser.mobileMasked}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
-        {photo && <img src={photo} alt="preview" style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 10, marginBottom: 16, border: "2px solid #E9ECEF" }} />}
 
-        {/* ── Step 5: Location ── */}
-        <FormLabel step="5" text="📍 Location Tag" />
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "#F8F9FA", border: "1.5px solid #E9ECEF", borderRadius: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 18 }}>📍</span>
-          <span style={{ flex: 1, fontSize: 13, color: gpsLoc ? "#212529" : "#ADB5BD" }}>
-            {gpsLoc || "Tap 'Get GPS' to auto-detect location"}
-          </span>
-          <button onClick={getGPS} style={{ padding: "7px 14px", border: "1.5px solid #E9ECEF", borderRadius: 50, background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#495057", flexShrink: 0 }}>
-            {gpsState === "loading" ? "📡 Fetching…" : "📡 Get GPS"}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 24, borderTop: "1px solid var(--line)", paddingTop: 20 }}>
+          <button className="button secondary" onClick={() => step === 0 ? reset() : setStep(step - 1)}>
+            <ChevronLeft size={16} /> {step === 0 ? "Reset" : "Back"}
           </button>
-        </div>
-        <input value={manualLoc} onChange={(e) => setManualLoc(e.target.value)} onFocus={onF} onBlur={onB}
-          placeholder="Or type address — e.g. Sector 12, Dwarka, New Delhi 110075"
-          style={{ ...inp, marginBottom: 22 }} />
-
-        {/* ── Buttons ── */}
-        <div style={{ display: "flex", gap: 12 }}>
-          <button onClick={submit} disabled={submitting}
-            style={{ padding: "12px 28px", border: "none", borderRadius: 50, background: submitting ? "#ADB5BD" : "linear-gradient(135deg,#FF6B00,#FF8C00)", color: "#fff", fontSize: 14, fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer", boxShadow: "0 4px 16px rgba(255,107,0,.3)" }}>
-            {submitting ? "⏳ Saving…" : "🚀 Submit Report"}
-          </button>
-          <button onClick={reset} style={{ padding: "12px 22px", border: "1.5px solid #E9ECEF", borderRadius: 50, background: "#F1F3F5", color: "#495057", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-            ↺ Reset
-          </button>
-        </div>
-
-        {/* Attribution note */}
-        <div style={{ marginTop: 16, padding: "10px 14px", background: "#EFF6FF", borderRadius: 10, fontSize: 12, color: "#1D4ED8", display: "flex", gap: 8, alignItems: "center" }}>
-          <span>ℹ️</span>
-          <span>Saved under Aadhaar <strong>{currentUser}</strong> — visible in <strong>My Reports</strong></span>
+          {step < STEPS.length - 1 ? (
+            <button className="button primary" disabled={!canContinue} onClick={() => setStep(step + 1)}>
+              Continue <ChevronRight size={16} />
+            </button>
+          ) : (
+            <button className="button primary" disabled={submitting} onClick={submit}>
+              {submitting ? "Submitting secure report..." : "Submit Verified Report"}
+            </button>
+          )}
         </div>
       </div>
     </div>

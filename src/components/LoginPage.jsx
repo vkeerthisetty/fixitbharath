@@ -1,122 +1,253 @@
-import { useState, useRef } from "react";
-import { AADHAR_IDS } from "../constants.js";
+import { useState } from "react";
+import { KeyRound, ShieldCheck, Smartphone, Lock, Eye } from "lucide-react";
+import { demoIdentities, requestLoginOtp, verifyLoginOtp } from "../services/auth.js";
 
 export default function LoginPage({ onLogin }) {
-  const [a1, setA1] = useState("");
-  const [a2, setA2] = useState("");
-  const [a3, setA3] = useState("");
-  const [pwd, setPwd] = useState("");
+  const [aadhaar, setAadhaar] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [otp, setOtp] = useState("");
+  const [challenge, setChallenge] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [suc, setSuc] = useState("");
-  const r2 = useRef(), r3 = useRef(), rp = useRef();
 
-  const handleDigits = (val, setter, nextRef) => {
-    const v = val.replace(/\D/g, "");
-    setter(v);
-    if (v.length === 4 && nextRef) nextRef.current?.focus();
-  };
+  const onlyDigits = (value) => value.replace(/\D/g, "");
+  const formatAadhaar = (value) =>
+    onlyDigits(value)
+      .slice(0, 12)
+      .replace(/(\d{4})(?=\d)/g, "$1 ")
+      .trim();
 
-  const fillTest = (id) => {
-    const parts = id.split(" ");
-    setA1(parts[0]); setA2(parts[1]); setA3(parts[2]);
-    rp.current?.focus();
-  };
+  const startOtp = async () => {
+    setErr("");
+    setSuc("");
+    const aadhaarDigits = onlyDigits(aadhaar);
+    const mobileDigits = onlyDigits(mobile);
 
-  const doLogin = () => {
-    const aadhaar = `${a1} ${a2} ${a3}`;
-    setErr(""); setSuc("");
-    if (a1.length !== 4 || a2.length !== 4 || a3.length !== 4) {
-      setErr("❌ Aadhaar must be 12 digits (XXXX-XXXX-XXXX)"); return;
+    if (aadhaarDigits.length !== 12 || mobileDigits.length !== 10) {
+      setErr("Please enter a valid 12-digit Aadhaar number and a 10-digit mobile number.");
+      return;
     }
-    if (!AADHAR_IDS.includes(aadhaar)) {
-      setErr("❌ Aadhaar not found in registry. Use a test ID below."); return;
+
+    setBusy(true);
+    try {
+      const nextChallenge = await requestLoginOtp({ aadhaar, mobile });
+      setChallenge(nextChallenge);
+      setSuc(`OTP successfully generated! Demo OTP: ${nextChallenge.demoOtp}`);
+    } catch (error) {
+      setErr(error.message);
+    } finally {
+      setBusy(false);
     }
-    if (pwd !== "demo123") {
-      setErr("❌ Wrong password. Use: demo123"); return;
-    }
-    setSuc("✅ Aadhaar verified! Logging in…");
-    setTimeout(() => onLogin(aadhaar), 700);
   };
 
-  const inp = {
-    width: "100%", padding: "12px 16px", border: "1.5px solid #E9ECEF",
-    borderRadius: 8, fontSize: 14, outline: "none", fontFamily: "inherit",
-    color: "#212529", background: "#fff", transition: "border-color .2s",
+  const verifyOtp = async () => {
+    setErr("");
+    setSuc("");
+    if (!challenge) {
+      setErr("Please request an OTP first.");
+      return;
+    }
+    if (onlyDigits(otp).length !== 6) {
+      setErr("Please enter the 6-digit OTP.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const user = await verifyLoginOtp({ aadhaar, mobile, otp: onlyDigits(otp) });
+      setSuc("Verification successful! Securely signing in...");
+      setTimeout(() => onLogin(user), 600);
+    } catch (error) {
+      setErr(error.message);
+    } finally {
+      setBusy(false);
+    }
   };
-  const onFocus = (e) => (e.target.style.borderColor = "#FF6B00");
-  const onBlur  = (e) => (e.target.style.borderColor = "#E9ECEF");
+
+  const fillDemo = (identity) => {
+    setAadhaar(identity.demoAadhaar);
+    setMobile(identity.demoMobile);
+    setOtp("");
+    setChallenge(null);
+    setErr("");
+    setSuc("");
+  };
 
   return (
-    <div style={{ fontFamily: "'Noto Sans', sans-serif", background: "linear-gradient(135deg,#fff8f3,#f0f4ff,#f0fff0)", minHeight: "100vh" }}>
-      {/* Tricolor stripe */}
-      <div style={{ height: 5, background: "linear-gradient(to right,#FF6B00 33%,#fff 33%,#fff 66%,#138808 66%)" }} />
-
-      <nav style={{ background: "#fff", padding: "13px 28px", boxShadow: "0 2px 12px rgba(0,0,0,.06)" }}>
-        <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 800, color: "#FF6B00" }}>
-          FixIt<span style={{ color: "#138808" }}>Bharat</span>
-        </div>
-        <div style={{ fontSize: 10, color: "#ADB5BD", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 1 }}>
-          नागरिक शिकायत पोर्टल · Citizen Issue Tracker
-        </div>
-      </nav>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 20px" }}>
-        <div style={{ background: "#fff", borderRadius: 24, padding: "44px 38px", width: "100%", maxWidth: 450, boxShadow: "0 20px 60px rgba(0,0,0,.10)" }}>
-
-          <div style={{ width: 70, height: 70, background: "linear-gradient(135deg,#FF6B00,#000080)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", fontSize: 30 }}>🇮🇳</div>
-          <div style={{ fontFamily: "Georgia, serif", fontSize: 26, fontWeight: 800, textAlign: "center", color: "#FF6B00", marginBottom: 4 }}>FixItBharat</div>
-          <div style={{ textAlign: "center", fontSize: 13, color: "#ADB5BD", marginBottom: 28 }}>Secure Aadhaar Login</div>
-
-          {err && <div style={{ background: "#FFF0F0", border: "1px solid #FFB3B3", color: "#CC0000", padding: "10px 14px", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{err}</div>}
-          {suc && <div style={{ background: "#e8f5e9", border: "1px solid #A5D6A7", color: "#138808", padding: "10px 14px", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{suc}</div>}
-
-          {/* Aadhaar input */}
-          <label style={{ fontSize: 12, fontWeight: 700, color: "#495057", display: "block", marginBottom: 6, letterSpacing: 0.3 }}>AADHAAR NUMBER</label>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-            {[[a1, setA1, r2, null], [a2, setA2, r3, r2], [a3, setA3, null, r3]].map(([v, set, nxt, ref], i) => (
-              <input key={i} ref={ref || undefined} type="text" maxLength={4} value={v}
-                onChange={(e) => handleDigits(e.target.value, set, nxt)}
-                onFocus={onFocus} onBlur={onBlur} placeholder="XXXX"
-                style={{ ...inp, flex: 1, textAlign: "center", letterSpacing: 3, fontSize: 17, fontWeight: 700, fontFamily: "monospace", padding: "12px 6px" }} />
-            ))}
+    <div className="login-shell" style={{ animation: "fadeInSlideUp 0.6s ease" }}>
+      <section className="login-intro">
+        <div className="brand" style={{ marginBottom: 40 }}>
+          <div className="brand-mark" style={{ background: "var(--saffron-gradient)", width: 44, height: 44, fontSize: 22 }}>FB</div>
+          <div>
+            <div className="brand-title" style={{ fontSize: 24 }}>FixItBharat</div>
+            <div className="brand-subtitle" style={{ color: "#94a3b8" }}>Citizen Triage & Resolution</div>
           </div>
-          <div style={{ fontSize: 11, color: "#ADB5BD", marginBottom: 16 }}>Format: XXXX – XXXX – XXXX (12 digits)</div>
+        </div>
 
-          {/* Password */}
-          <label style={{ fontSize: 12, fontWeight: 700, color: "#495057", display: "block", marginBottom: 6, letterSpacing: 0.3 }}>PASSWORD</label>
-          <input type="password" value={pwd} ref={rp}
-            onChange={(e) => setPwd(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && doLogin()}
-            onFocus={onFocus} onBlur={onBlur}
-            placeholder="Enter your password"
-            style={{ ...inp, marginBottom: 16 }} />
+        <div className="eyebrow" style={{ color: "#ff9933" }}>Verified Public reporting portal</div>
+        <h1 style={{ 
+          fontFamily: "'Outfit', sans-serif", 
+          fontSize: "44px", 
+          lineHeight: 1.15, 
+          letterSpacing: "-0.02em", 
+          margin: "12px 0 16px", 
+          maxWidth: "600px",
+          fontWeight: 800,
+          background: "linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent"
+        }}>
+          Report local civic issues with secure Aadhaar OTP verification.
+        </h1>
+        <p style={{ color: "#94a3b8", fontSize: "15px", lineHeight: 1.6, maxWidth: "520px", marginBottom: "32px" }}>
+          To maintain transparency and prevent spam, FixItBharat links complaints to verified citizens using masked references. Raw credentials are never displayed publicly.
+        </p>
 
-          <button onClick={doLogin} style={{ width: "100%", padding: 13, border: "none", borderRadius: 50, background: "linear-gradient(135deg,#FF6B00,#FF8C00)", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 16px rgba(255,107,0,.3)", marginBottom: 20 }}>
-            🔐 Verify &amp; Login
-          </button>
-
-          {/* Test IDs */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, color: "#ADB5BD", fontSize: 11 }}>
-            <div style={{ flex: 1, height: 1, background: "#E9ECEF" }} />
-            Test Aadhaar IDs — click to autofill
-            <div style={{ flex: 1, height: 1, background: "#E9ECEF" }} />
-          </div>
-          <div style={{ background: "#F8F9FA", border: "1px solid #E9ECEF", borderRadius: 8, padding: 10, maxHeight: 185, overflowY: "auto" }}>
-            {AADHAR_IDS.map((id) => (
-              <div key={id} onClick={() => fillTest(id)}
-                style={{ display: "flex", justifyContent: "space-between", padding: "7px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace", fontSize: 13 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#FFF3E8")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                <span>{id}</span>
-                <span style={{ background: "#e8f5e9", color: "#138808", padding: "2px 8px", borderRadius: 50, fontSize: 10, fontWeight: 700 }}>✓ Verified</span>
+        <div className="grid grid-3" style={{ maxWidth: "680px" }}>
+          {[
+            { icon: ShieldCheck, title: "Verified Identity", desc: "Masked profile" },
+            { icon: Smartphone, title: "Secure OTP", desc: "Instant SMS demo" },
+            { icon: KeyRound, title: "Reference IDs", desc: "No raw Aadhaar" },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.title} className="panel" style={{ 
+                background: "rgba(255, 255, 255, 0.03)", 
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                padding: "16px",
+                borderRadius: "var(--radius)",
+                color: "#ffffff"
+              }}>
+                <Icon size={22} style={{ color: "#ff9933" }} />
+                <div style={{ fontWeight: 700, marginTop: 10, fontSize: "14px", fontFamily: "'Outfit', sans-serif" }}>{item.title}</div>
+                <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: 4 }}>{item.desc}</div>
               </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="login-form-wrap">
+        <div style={{ maxWidth: "420px", width: "100%", margin: "0 auto" }}>
+          <div style={{ display: "inline-flex", padding: "6px 12px", borderRadius: "999px", background: "rgba(30, 58, 138, 0.06)", color: "var(--primary)", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, marginBottom: 16 }}>
+            <Lock size={12} /> SECURE NATIONAL GATEWAY
+          </div>
+          
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: "28px", fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text)" }}>Sign in to Portal</h2>
+          <p style={{ color: "var(--muted)", fontSize: "14px", marginTop: 4, marginBottom: 28 }}>
+            Enter your credentials or choose a pre-configured profile below.
+          </p>
+
+          {err && (
+            <div className="panel" style={{ 
+              borderColor: "var(--danger)", 
+              background: "var(--danger-light)", 
+              color: "var(--danger)", 
+              padding: "12px 16px", 
+              fontSize: "13px", 
+              fontWeight: 600,
+              borderRadius: "var(--radius)",
+              marginBottom: 20
+            }}>
+              {err}
+            </div>
+          )}
+          
+          {suc && (
+            <div className="panel" style={{ 
+              borderColor: "var(--success)", 
+              background: "var(--success-light)", 
+              color: "var(--success)", 
+              padding: "12px 16px", 
+              fontSize: "13px", 
+              fontWeight: 600,
+              borderRadius: "var(--radius)",
+              marginBottom: 20
+            }}>
+              {suc}
+            </div>
+          )}
+
+          <div className="grid" style={{ gap: "16px" }}>
+            <div className="field">
+              <label className="field-label">Aadhaar Card Number</label>
+              <div style={{ position: "relative" }}>
+                <input 
+                  className="input" 
+                  value={aadhaar} 
+                  onChange={(event) => setAadhaar(formatAadhaar(event.target.value))} 
+                  placeholder="0000 0000 0000"
+                  style={{ letterSpacing: "0.08em", fontWeight: 600 }}
+                  disabled={busy}
+                />
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="field-label">Aadhaar-Linked Mobile</label>
+              <input 
+                className="input" 
+                value={mobile} 
+                onChange={(event) => setMobile(onlyDigits(event.target.value).slice(0, 10))} 
+                placeholder="10-digit mobile number"
+                disabled={busy}
+              />
+            </div>
+
+            {challenge && (
+              <div className="field" style={{ animation: "fadeInSlideUp 0.3s ease" }}>
+                <label className="field-label">Enter 6-Digit One-Time Password (OTP)</label>
+                <input 
+                  className="input" 
+                  value={otp} 
+                  onChange={(event) => setOtp(onlyDigits(event.target.value).slice(0, 6))} 
+                  onKeyDown={(event) => event.key === "Enter" && verifyOtp()} 
+                  placeholder="XXXXXX" 
+                  style={{ letterSpacing: "0.12em", textAlign: "center", fontWeight: 700, fontSize: "16px" }}
+                  disabled={busy}
+                />
+                <span className="helper">Demo OTP is <strong>123456</strong></span>
+              </div>
+            )}
+
+            <button 
+              className="button primary" 
+              disabled={busy} 
+              onClick={challenge ? verifyOtp : startOtp}
+              style={{ width: "100%", marginTop: "8px" }}
+            >
+              {busy ? "Securing connection..." : challenge ? "Verify OTP & Access Portal" : "Generate Secure OTP"}
+            </button>
+          </div>
+
+          <div className="section-title" style={{ marginTop: 32, marginBottom: 12 }}>Verified Demo Citizens</div>
+          <div className="grid" style={{ gap: "10px" }}>
+            {demoIdentities.map((identity) => (
+              <button 
+                key={identity.id} 
+                className="button secondary" 
+                onClick={() => fillDemo(identity)} 
+                style={{ 
+                  justifyContent: "space-between", 
+                  width: "100%", 
+                  padding: "12px 16px",
+                  height: "auto",
+                  border: "1.5px solid var(--line)"
+                }}
+              >
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--text)" }}>{identity.aadhaarMasked}</div>
+                  <div className="helper" style={{ fontSize: "11px" }}>Linked Mobile: {identity.mobileMasked}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--primary)", fontSize: "11px", fontWeight: 700 }}>
+                  <Eye size={12} /> SELECT
+                </div>
+              </button>
             ))}
           </div>
-          <p style={{ fontSize: 11, color: "#ADB5BD", textAlign: "center", marginTop: 10 }}>
-            Password for all IDs: <strong>demo123</strong>
-          </p>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
